@@ -1,12 +1,15 @@
 from flask import Flask, render_template, request, abort
 import secrets
 import pymysql
+from sqlalchemy import Table, Column, Integer, String, create_engine, MetaData
 
 app = Flask(__name__)
 
-connection = pymysql.connect(host = 'r6ze0q02l4me77k3.chr7pe7iynqr.eu-west-1.rds.amazonaws.com', 
-    user = 'uahbjr2zeau57agp', passwd = 'pme0dnemttcv0233', db = 'dpn3gul2huaqjq1l')                         
-cursor = connection.cursor()
+engine = create_engine('mysql+pymysql://uahbjr2zeau57agp:pme0dnemttcv0233@r6ze0q02l4me77k3.chr7pe7iynqr.eu-west-1.rds.amazonaws.com:3306/dpn3gul2huaqjq1l')
+connection = engine.connect()
+
+meta = MetaData(engine)
+user_email = Table('user_email', meta, autoload = True)
 
 @app.route('/')
 def hello_world():
@@ -16,26 +19,48 @@ def hello_world():
 def login():
     if request.method == 'POST':
         email_t = request.form.get('email')
-        
-    if cursor.execute('SELECT * FROM user_email WHERE email=%s', email_t) == 0:
+
+    is_exist = 0
+
+    query = user_email.select().where(user_email.c.email == email_t)
+    result = connection.execute(query)
+    for row in result:
+        is_exist = 1
+
+    if is_exist == 0:
         token = secrets.token_urlsafe(30)
-        cursor.execute('INSERT INTO user_email (email, token) VALUES (%s, %s)', (email_t, token))
-        connection.commit()  
+        query = user_email.insert().values(email = email_t, token = token)
+        connection.execute(query)  
         return render_template('send_ok.html', title = 'Link create', link = '/user/' + str(token))
     else:
-        cursor.execute('SELECT token FROM user_email WHERE email=%s', email_t)
-        token = cursor.fetchone()[0]
+        query = user_email.select().where(user_email.c.email == email_t)
+        result = connection.execute(query)
+        for row in result:
+            token = row[1]
+            print(token)
         return render_template('send_ok.html', title = 'Your link already exists', link = '/user/' + str(token))
 
 @app.route('/user/<string:token>')
 def email_link(token):
-    if cursor.execute('SELECT * FROM user_email WHERE token=%s', token) == 0:
+    is_exist = 0
+
+    query = user_email.select().where(user_email.c.token == token)
+    result = connection.execute(query)
+    for row in result:
+        is_exist = 1
+
+    if is_exist == 0:
         return 'This user does not exist'
     else:
-        cursor.execute('UPDATE user_email SET count = count + 1 WHERE token=%s', token)
-        connection.commit()
-        cursor.execute('SELECT count FROM user_email WHERE token=%s', token)
-        cnt = cursor.fetchone()[0]
+        query = user_email.update().where(user_email.c.token == token).values(count = user_email.c.count + 1)
+        connection.execute(query)
+
+        query = user_email.select(user_email.c.count).where(user_email.c.token == token)
+        result = connection.execute(query)
+        cnt = 0
+        for row in result:
+            cnt = row[2]
+
         return render_template('link_cnt.html', cnt = cnt)
 
 if __name__ == '__main__':

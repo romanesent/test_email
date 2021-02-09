@@ -7,6 +7,9 @@ name = "pypi"
 gunicorn = "*"
 flask = "*"
 pymysql = "*"
+flask-sqlalchemy = "*"
+sqlalchemy = "*"
+mysql-connector-python = "*"
 
 [dev-packages]
 
